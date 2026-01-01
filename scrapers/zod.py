@@ -20,89 +20,71 @@ class DocPage:
     version: str
 
 
-# Key Zod documentation pages
+# Zod documentation pages
 ZOD_DOC_URLS = [
-    # Introduction and basics
-    "https://zod.dev/?id=introduction",
-    "https://zod.dev/?id=installation",
-    "https://zod.dev/?id=basic-usage",
+    # Core documentation
+    ("https://zod.dev/basics", "basics", "Basic Usage"),
+    ("https://zod.dev/api", "api", "Defining Schemas"),
+    ("https://zod.dev/error-customization", "errors", "Customizing Errors"),
+    ("https://zod.dev/error-formatting", "errors", "Formatting Errors"),
+    ("https://zod.dev/metadata", "advanced", "Metadata and Registries"),
+    ("https://zod.dev/json-schema", "advanced", "JSON Schema"),
+    ("https://zod.dev/codecs", "advanced", "Codecs"),
+    ("https://zod.dev/library-authors", "advanced", "For Library Authors"),
 
-    # Primitives
-    "https://zod.dev/?id=primitives",
-    "https://zod.dev/?id=coercion-for-primitives",
-    "https://zod.dev/?id=literals",
-
-    # Complex types
-    "https://zod.dev/?id=strings",
-    "https://zod.dev/?id=numbers",
-    "https://zod.dev/?id=bigints",
-    "https://zod.dev/?id=booleans",
-    "https://zod.dev/?id=dates",
-
-    # Objects and arrays
-    "https://zod.dev/?id=zod-objects",
-    "https://zod.dev/?id=arrays",
-    "https://zod.dev/?id=tuples",
-    "https://zod.dev/?id=unions",
-    "https://zod.dev/?id=discriminated-unions",
-    "https://zod.dev/?id=records",
-    "https://zod.dev/?id=maps",
-    "https://zod.dev/?id=sets",
-
-    # Advanced
-    "https://zod.dev/?id=intersections",
-    "https://zod.dev/?id=recursive-types",
-    "https://zod.dev/?id=promises",
-    "https://zod.dev/?id=instanceof",
-    "https://zod.dev/?id=functions",
-    "https://zod.dev/?id=preprocess",
-    "https://zod.dev/?id=custom-schemas",
-
-    # Schema methods
-    "https://zod.dev/?id=schema-methods",
-    "https://zod.dev/?id=parse",
-    "https://zod.dev/?id=safeparse",
-    "https://zod.dev/?id=refine",
-    "https://zod.dev/?id=superrefine",
-    "https://zod.dev/?id=transform",
-    "https://zod.dev/?id=default",
-    "https://zod.dev/?id=optional",
-    "https://zod.dev/?id=nullable",
-
-    # Error handling
-    "https://zod.dev/?id=error-handling",
-    "https://zod.dev/?id=error-formatting",
+    # Package docs
+    ("https://zod.dev/packages/zod", "packages", "Zod Package"),
+    ("https://zod.dev/packages/mini", "packages", "Zod Mini"),
 ]
 
 
-def scrape_zod_page(url: str) -> Optional[DocPage]:
-    """Scrape the Zod documentation page."""
+def scrape_zod_page(url: str, section: str, title: str) -> Optional[DocPage]:
+    """Scrape a single Zod documentation page."""
     try:
-        # Zod uses a single-page app, so we scrape the main page
-        base_url = "https://zod.dev/"
-        response = requests.get(base_url, timeout=10)
+        response = requests.get(url, timeout=15)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Get the main content area
-        content_area = soup.find('main') or soup.find('article') or soup.find('body')
+        # Find main content area - Zod uses article or main
+        content_area = soup.find('article') or soup.find('main')
+
+        if not content_area:
+            # Try to find content div
+            content_area = soup.find('div', class_='content') or soup.find('div', {'role': 'main'})
 
         if not content_area:
             print(f"Warning: No content found for {url}")
             return None
 
-        # Extract section ID from URL
-        section_id = url.split('?id=')[-1] if '?id=' in url else "general"
+        # Remove navigation, sidebar, and footer elements
+        for elem in content_area.find_all(['nav', 'aside', 'footer', 'header']):
+            elem.decompose()
+
+        # Remove any sponsor sections
+        for elem in content_area.find_all(class_=lambda x: x and ('sponsor' in x.lower() or 'footer' in x.lower())):
+            elem.decompose()
+
+        # Get the actual title from the page if available
+        title_elem = content_area.find('h1') or soup.find('h1')
+        if title_elem:
+            title = title_elem.get_text(strip=True)
 
         # Convert to markdown
         content = md(str(content_area), heading_style="ATX")
 
+        # Clean up excessive whitespace
+        content = '\n'.join(line for line in content.split('\n') if line.strip())
+
+        if len(content) < 100:
+            print(f"Warning: Very little content for {url}")
+            return None
+
         return DocPage(
             url=url,
-            title=f"Zod - {section_id.replace('-', ' ').title()}",
+            title=title,
             content=content,
-            section=section_id,
+            section=section,
             version="3.x"
         )
 
@@ -112,39 +94,15 @@ def scrape_zod_page(url: str) -> Optional[DocPage]:
 
 
 def scrape_all_zod_docs() -> List[DocPage]:
-    """
-    Scrape Zod documentation.
-
-    Note: Zod uses a single-page documentation site, so we scrape
-    the full page once and it contains all sections.
-    """
+    """Scrape all Zod documentation pages."""
     docs = []
 
-    print("Scraping: https://zod.dev/")
-
-    try:
-        response = requests.get("https://zod.dev/", timeout=10)
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Get main content
-        content_area = soup.find('main') or soup.find('article') or soup.find('body')
-
-        if content_area:
-            content = md(str(content_area), heading_style="ATX")
-
-            # Create a single comprehensive doc
-            docs.append(DocPage(
-                url="https://zod.dev/",
-                title="Zod Schema Validation",
-                content=content,
-                section="validation",
-                version="3.x"
-            ))
-
-    except Exception as e:
-        print(f"Error scraping Zod docs: {e}")
+    for url, section, title in ZOD_DOC_URLS:
+        print(f"Scraping: {url}")
+        doc = scrape_zod_page(url, section, title)
+        if doc:
+            docs.append(doc)
+        time.sleep(1)  # Be respectful to the server
 
     print(f"Scraped {len(docs)} Zod documentation pages")
     return docs
@@ -153,5 +111,6 @@ def scrape_all_zod_docs() -> List[DocPage]:
 if __name__ == "__main__":
     docs = scrape_all_zod_docs()
     for doc in docs:
-        print(f"\n--- {doc.title} ---")
+        print(f"\n--- {doc.title} ({doc.section}) ---")
+        print(f"Content length: {len(doc.content)} chars")
         print(doc.content[:500])
