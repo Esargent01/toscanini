@@ -9,13 +9,15 @@ from typing import List
 
 from scrapers.nextjs import scrape_all_nextjs_docs
 from scrapers.owasp import scrape_all_owasp_docs
+from scrapers.zod import scrape_all_zod_docs
+from scrapers.accessibility import scrape_all_accessibility_docs
 from processing.chunker import chunk_all_documents
 from processing.embedder import DocumentEmbedder, prepare_for_storage
 from database.vector_store import VectorStore
 
 
 def run_ingestion(
-    sources: List[str] = ["nextjs", "owasp"],
+    sources: List[str] = ["nextjs", "owasp", "zod", "accessibility"],
     clear_existing: bool = False
 ):
     """
@@ -65,6 +67,36 @@ def run_ingestion(
             for doc in owasp_docs
         ])
 
+    if "zod" in sources:
+        print("\n=== Scraping Zod docs ===")
+        zod_docs = scrape_all_zod_docs()
+        all_docs.extend([
+            {
+                "content": doc.content,
+                "url": doc.url,
+                "type": "zod",
+                "section": doc.section,
+                "title": doc.title,
+                "version": doc.version
+            }
+            for doc in zod_docs
+        ])
+
+    if "accessibility" in sources:
+        print("\n=== Scraping Accessibility docs ===")
+        a11y_docs = scrape_all_accessibility_docs()
+        all_docs.extend([
+            {
+                "content": doc.content,
+                "url": doc.url,
+                "type": "accessibility",
+                "section": doc.category,
+                "title": doc.title,
+                "version": doc.version
+            }
+            for doc in a11y_docs
+        ])
+
     if not all_docs:
         print("No documents scraped. Exiting.")
         return
@@ -99,8 +131,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sources",
         nargs="+",
-        default=["nextjs", "owasp"],
-        help="Documentation sources to ingest"
+        default=["nextjs", "owasp", "zod", "accessibility"],
+        help="Documentation sources to ingest (nextjs, owasp, zod, accessibility)"
     )
     parser.add_argument(
         "--clear",
