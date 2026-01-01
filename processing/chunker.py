@@ -3,7 +3,7 @@ Smart chunking for technical documentation.
 Preserves code blocks and semantic boundaries.
 """
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dataclasses import dataclass
 from typing import List
 import re
